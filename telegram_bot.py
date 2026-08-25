@@ -456,7 +456,7 @@ def load_chat_id() -> int | None:
 def get_or_create_chat(user_id: int):
     if user_id not in user_chats:
         chat = gemini_client.chats.create(
-            model="gemini-3.6-flash",
+            model="gemini-flash-lite-latest",
             config=types.GenerateContentConfig(
                 system_instruction=SYSTEM_INSTRUCTION,
                 tools=COACH_TOOLS,
