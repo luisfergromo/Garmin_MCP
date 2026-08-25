@@ -278,6 +278,24 @@ async def handle_voice(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(f"⚠️ Error procesando la nota de voz: {e}")
 
 
+import threading
+from http.server import HTTPServer, BaseHTTPRequestHandler
+
+class HealthHandler(BaseHTTPRequestHandler):
+    def do_GET(self):
+        self.send_response(200)
+        self.send_header("Content-type", "text/plain")
+        self.end_headers()
+        self.wfile.write(b"Garmin Coach Bot is alive!")
+    def log_message(self, format, *args):
+        pass  # Quiet logs
+
+def start_health_server():
+    port = int(os.getenv("PORT", 8080))
+    server = HTTPServer(("0.0.0.0", port), HealthHandler)
+    logger.info(f"Healthcheck server listening on port {port}")
+    server.serve_forever()
+
 def main():
     if not TELEGRAM_BOT_TOKEN:
         print("ERROR: Please set TELEGRAM_BOT_TOKEN in .env")
@@ -285,6 +303,10 @@ def main():
     if not GEMINI_API_KEY:
         print("ERROR: Please set GEMINI_API_KEY in .env")
         sys.exit(1)
+
+    # Start healthcheck server in background thread for Render Free Tier
+    health_thread = threading.Thread(target=start_health_server, daemon=True)
+    health_thread.start()
 
     print("Iniciando Garmin Coach Telegram Bot...")
     app = ApplicationBuilder().token(TELEGRAM_BOT_TOKEN).build()
