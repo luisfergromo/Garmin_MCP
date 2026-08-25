@@ -163,6 +163,132 @@ def get_fitness_scores() -> str:
     except: pass
     return json.dumps(res, default=str)
 
+def get_saved_workouts(limit: int = 15) -> str:
+    """Get list of saved workouts in Garmin Connect."""
+    try:
+        workouts = garmin_client.get_workouts(0, limit)
+        summary = []
+        for w in (workouts or []):
+            summary.append({
+                "workout_id": w.get("workoutId"),
+                "name": w.get("workoutName"),
+                "sport": w.get("sportType", {}).get("sportTypeKey"),
+                "estimated_duration_min": round((w.get("estimatedDurationInSecs", 0) or 0) / 60.0, 1),
+            })
+        return json.dumps(summary, default=str)
+    except Exception as e:
+        return f"Error retrieving workouts: {e}"
+
+def schedule_existing_workout(workout_id: int, date: str) -> str:
+    """Schedule an existing workout ID to a specific date (YYYY-MM-DD) on Garmin calendar/watch."""
+    try:
+        res = garmin_client._client.schedule_workout(workout_id, date)
+        return json.dumps({"status": "success", "workout_id": workout_id, "scheduled_date": date, "response": res}, default=str)
+    except Exception as e:
+        return f"Error scheduling workout: {e}"
+
+def create_running_interval_workout(name: str, warmup_min: int = 10, interval_min: int = 3, recovery_min: int = 2, repetitions: int = 5, cooldown_min: int = 5, schedule_date: str = "") -> str:
+    """Create a structured running interval workout (Warmup -> Repetitions of Interval/Recovery -> Cooldown) and upload to Garmin Connect.
+    Optionally schedule it on schedule_date (YYYY-MM-DD) to sync with Garmin watch.
+    """
+    try:
+        payload = {
+            "workoutName": name,
+            "description": f"Entrenamiento estructurado por tu Coach: {repetitions}x{interval_min}min con {recovery_min}min rec",
+            "sportType": {"sportTypeId": 1, "sportTypeKey": "running"},
+            "workoutSegments": [{
+                "segmentOrder": 1,
+                "sportType": {"sportTypeId": 1, "sportTypeKey": "running"},
+                "workoutSteps": [
+                    {
+                        "type": "ExecutableStepDTO",
+                        "stepOrder": 1,
+                        "stepType": {"stepTypeId": 1, "stepTypeKey": "warmup"},
+                        "endCondition": {"conditionTypeId": 2, "conditionTypeKey": "time"},
+                        "endConditionValue": float(warmup_min * 60),
+                    },
+                    {
+                        "type": "RepeatGroupDTO",
+                        "stepOrder": 2,
+                        "stepType": {"stepTypeId": 6, "stepTypeKey": "repeat"},
+                        "numberOfIterations": repetitions,
+                        "smartRepeat": False,
+                        "workoutSteps": [
+                            {
+                                "type": "ExecutableStepDTO",
+                                "stepOrder": 1,
+                                "stepType": {"stepTypeId": 3, "stepTypeKey": "interval"},
+                                "endCondition": {"conditionTypeId": 2, "conditionTypeKey": "time"},
+                                "endConditionValue": float(interval_min * 60),
+                            },
+                            {
+                                "type": "ExecutableStepDTO",
+                                "stepOrder": 2,
+                                "stepType": {"stepTypeId": 4, "stepTypeKey": "recovery"},
+                                "endCondition": {"conditionTypeId": 2, "conditionTypeKey": "time"},
+                                "endConditionValue": float(recovery_min * 60),
+                            }
+                        ]
+                    },
+                    {
+                        "type": "ExecutableStepDTO",
+                        "stepOrder": 3,
+                        "stepType": {"stepTypeId": 2, "stepTypeKey": "cooldown"},
+                        "endCondition": {"conditionTypeId": 2, "conditionTypeKey": "time"},
+                        "endConditionValue": float(cooldown_min * 60),
+                    }
+                ]
+            }]
+        }
+        res = garmin_client._client.upload_workout(json.dumps(payload))
+        w_id = res.get("workoutId")
+        result_info = {"status": "created", "workout_id": w_id, "workout_name": res.get("workoutName")}
+        
+        if schedule_date and w_id:
+            sched_res = garmin_client._client.schedule_workout(w_id, schedule_date)
+            result_info["scheduled_date"] = schedule_date
+            result_info["scheduled_status"] = "success"
+            
+        return json.dumps(result_info, default=str)
+    except Exception as e:
+        return f"Error creating running interval workout: {e}"
+
+def create_running_base_workout(name: str, duration_minutes: int, schedule_date: str = "", notes: str = "") -> str:
+    """Create a continuous running workout (Base / Z2 / Long Run / Tempo) and upload to Garmin Connect.
+    Optionally schedule it on schedule_date (YYYY-MM-DD) to sync directly to the watch.
+    """
+    try:
+        payload = {
+            "workoutName": name,
+            "description": notes or f"Carrera aeróbica continua de {duration_minutes} min guiada por tu Coach",
+            "sportType": {"sportTypeId": 1, "sportTypeKey": "running"},
+            "workoutSegments": [{
+                "segmentOrder": 1,
+                "sportType": {"sportTypeId": 1, "sportTypeKey": "running"},
+                "workoutSteps": [
+                    {
+                        "type": "ExecutableStepDTO",
+                        "stepOrder": 1,
+                        "stepType": {"stepTypeId": 3, "stepTypeKey": "interval"},
+                        "endCondition": {"conditionTypeId": 2, "conditionTypeKey": "time"},
+                        "endConditionValue": float(duration_minutes * 60),
+                    }
+                ]
+            }]
+        }
+        res = garmin_client._client.upload_workout(json.dumps(payload))
+        w_id = res.get("workoutId")
+        result_info = {"status": "created", "workout_id": w_id, "workout_name": res.get("workoutName")}
+        
+        if schedule_date and w_id:
+            sched_res = garmin_client._client.schedule_workout(w_id, schedule_date)
+            result_info["scheduled_date"] = schedule_date
+            result_info["scheduled_status"] = "success"
+            
+        return json.dumps(result_info, default=str)
+    except Exception as e:
+        return f"Error creating running base workout: {e}"
+
 COACH_TOOLS = [
     get_today_date,
     get_daily_stats,
@@ -174,6 +300,10 @@ COACH_TOOLS = [
     get_activity_details,
     get_body_battery,
     get_fitness_scores,
+    get_saved_workouts,
+    schedule_existing_workout,
+    create_running_interval_workout,
+    create_running_base_workout,
 ]
 
 SYSTEM_INSTRUCTION = """
@@ -182,7 +312,7 @@ Tienes acceso a todas sus métricas fisiológicas y actividades reales de Garmin
 
 CONTEXTO DEL ATLETA:
 - Nombre: Luis Fernando Gutiérrez Romo
-- Perfil: Atleta de resistencia híbrido. VO2 Máx excelente (~57), FC reposo baja (~48 bpm).
+- Perfil: Atleta de resistencia híbrido. VO2 Máx excelente (~57), FC reposo baja (~48 bpm). Reloj: Garmin EPIX Gen2.
 - PRIORIDAD #1: Natación (entrena fuerte Lunes a Viernes en alberca, sesiones de 2.5 a 3.5 km). Sus hombros y energía en agua deben protegerse.
 - PRIORIDAD #2: Carrera a pie (Running). Entre semana en cinta (sesiones cortas de calidad/base/Z2) y los SÁBADOS Tirada Larga en Calle (Outdoor Long Run, 8-14 km) ya que no nada los sábados.
 - PRIORIDAD #3: Fuerza en Gimnasio (Pesas y estabilidad core/escapular).
@@ -190,9 +320,14 @@ CONTEXTO DEL ATLETA:
 
 DIRECTRICES COMO COACH:
 1. Consulta proactivamente las herramientas de Garmin cuando Luis Fernando te pregunte por su estado, cómo entrenar hoy, cómo durmió o cómo estuvo su sesión.
-2. Sé motivador, conciso, estructurado y altamente técnico en fisiología del deporte (zonas de frecuencia cardíaca Z1-Z5, Training Load, HRV, Body Battery).
-3. Usa emojis deportivos apropiados (🏃‍♂️, 🏊‍♂️, 🏋️‍♂️, 🫀, ⚡, 🌙).
-4. REGLAS DE FORMATO PARA TELEGRAM (CRÍTICO):
+2. CAPACIDAD DE CREAR Y PROGRAMAR ENTRENAMIENTOS:
+   - ¡SÍ PUEDES CREAR Y PROGRAMAR ENTRENAMIENTOS REALES EN SU RELOJ GARMIN!
+   - Cuando Luis Fernando te pida programar un entrenamiento (ej: series, intervalos, fartlek, tirada larga, carrera base):
+     a) Usa `create_running_interval_workout` o `create_running_base_workout` con la fecha indicada en `schedule_date` (formato YYYY-MM-DD).
+     b) Confírmale con entusiasmo que el entrenamiento ha sido creado y programado en su calendario de Garmin Connect, detallando las fases (Calentamiento, Series, Recuperaciones, Enfriamiento) y que al sincronizar su reloj Garmin EPIX le aparecerá en el calendario de entrenamiento del día.
+3. Sé motivador, conciso, estructurado y altamente técnico en fisiología del deporte (zonas de frecuencia cardíaca Z1-Z5, Training Load, HRV, Body Battery).
+4. Usa emojis deportivos apropiados (🏃‍♂️, 🏊‍♂️, 🏋️‍♂️, 🫀, ⚡, 🌙).
+5. REGLAS DE FORMATO PARA TELEGRAM (CRÍTICO):
    - NUNCA uses hashtags (#, ##, ###) para títulos o secciones.
    - Usa SIEMPRE texto en negrita con asteriscos dobles (**Título**) y emojis (ej: 🏊‍♂️ **Natación**, 🫀 **Frecuencia Cardíaca: 48 bpm**).
    - Usa viñetas limpias (• o -) para listas.
