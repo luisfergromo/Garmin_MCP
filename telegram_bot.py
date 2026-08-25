@@ -453,18 +453,52 @@ def load_chat_id() -> int | None:
         pass
     return int(ALLOWED_USER_ID) if ALLOWED_USER_ID else None
 
-def get_or_create_chat(user_id: int):
-    if user_id not in user_chats:
+# Multi-model Failover Cascade for 100% Uptime and No Rate Limits
+FALLBACK_MODELS = [
+    "gemini-3.5-flash-lite",     # 500 RPD / 15 RPM
+    "gemini-3.1-flash-lite",     # 500 RPD / 15 RPM
+    "gemini-flash-lite-latest",  # 500 RPD / 15 RPM
+    "gemini-3.5-flash",          # 20 RPD fallback
+    "gemini-3.7-flash",          # 20 RPD fallback
+]
+
+user_active_model_idx = {}
+user_chats = {}
+
+def get_chat_for_model(user_id: int, model_name: str):
+    key = f"{user_id}_{model_name}"
+    if key not in user_chats:
         chat = gemini_client.chats.create(
-            model="gemini-flash-lite-latest",
+            model=model_name,
             config=types.GenerateContentConfig(
                 system_instruction=SYSTEM_INSTRUCTION,
                 tools=COACH_TOOLS,
                 temperature=0.7,
             ),
         )
-        user_chats[user_id] = chat
-    return user_chats[user_id]
+        user_chats[key] = chat
+    return user_chats[key]
+
+def execute_with_failover(user_id: int, message_or_parts: Any) -> Any:
+    """Send message to Gemini with automatic failover to alternative models if rate limits (429) or 503 occur."""
+    start_idx = user_active_model_idx.get(user_id, 0)
+    last_err = None
+
+    for offset in range(len(FALLBACK_MODELS)):
+        idx = (start_idx + offset) % len(FALLBACK_MODELS)
+        model_name = FALLBACK_MODELS[idx]
+        try:
+            chat = get_chat_for_model(user_id, model_name)
+            response = chat.send_message(message_or_parts)
+            user_active_model_idx[user_id] = idx  # Keep using successful model
+            return response
+        except Exception as e:
+            err_str = str(e)
+            logger.warning(f"Model {model_name} failed ({err_str[:90]}). Failing over to next model...")
+            last_err = e
+            continue
+
+    raise last_err or RuntimeError("All fallback models exhausted")
 
 
 async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -500,14 +534,13 @@ async def briefing_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     save_chat_id(update.effective_chat.id)
     await context.bot.send_chat_action(chat_id=update.effective_chat.id, action="typing")
 
-    chat = get_or_create_chat(user.id)
     prompt = (
         "Genera mi **Morning Briefing** de hoy. "
         "Consulta mi sueño de anoche (profundo/REM/score), mi HRV, mi FC en reposo, Body Battery y Training Readiness. "
         "Dame el diagnóstico rápido, recuérdame la prioridad de hoy según el día de la semana y pregúntame cómo amanecieron mis músculos/hombros."
     )
     try:
-        response = chat.send_message(prompt)
+        response = execute_with_failover(user.id, prompt)
         if response and response.text:
             formatted = format_for_telegram(response.text)
             try:
@@ -515,7 +548,8 @@ async def briefing_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
             except Exception:
                 await update.message.reply_text(response.text)
     except Exception as e:
-        await update.message.reply_text(f"⚠️ Error generando el briefing: {e}")
+        logger.error(f"Error in briefing: {e}", exc_info=True)
+        await update.message.reply_text(f"⚠️ Hubo un detalle temporal con el servicio de IA. Por favor reintenta en un momento.")
 
 
 async def weekly_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -525,13 +559,12 @@ async def weekly_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     await context.bot.send_chat_action(chat_id=update.effective_chat.id, action="typing")
-    chat = get_or_create_chat(user.id)
     prompt = (
         "Genera un desglose y análisis de mi volumen y carga acumulada de esta semana usando `get_weekly_training_summary`. "
         "Desglosa kilómetros en agua, kilómetros en carrera, sesiones de gimnasio y Training Load total, dándome tu retroalimentación como Coach."
     )
     try:
-        response = chat.send_message(prompt)
+        response = execute_with_failover(user.id, prompt)
         if response and response.text:
             formatted = format_for_telegram(response.text)
             try:
@@ -539,7 +572,8 @@ async def weekly_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
             except Exception:
                 await update.message.reply_text(response.text)
     except Exception as e:
-        await update.message.reply_text(f"⚠️ Error generando el resumen semanal: {e}")
+        logger.error(f"Error in weekly: {e}", exc_info=True)
+        await update.message.reply_text(f"⚠️ Hubo un detalle temporal con el servicio de IA. Por favor reintenta en un momento.")
 
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -555,30 +589,20 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     await context.bot.send_chat_action(chat_id=update.effective_chat.id, action="typing")
 
-    import time
-    response = None
-    last_err = None
-
-    for attempt in range(3):
-        try:
-            chat = get_or_create_chat(user.id)
-            response = chat.send_message(user_text)
-            break
-        except Exception as e:
-            last_err = e
-            logger.warning(f"Attempt {attempt+1} failed: {e}. Retrying in 2s...")
-            time.sleep(2)
-
-    if response and response.text:
-        formatted = format_for_telegram(response.text)
-        try:
-            await update.message.reply_text(formatted, parse_mode="Markdown")
-        except Exception as err:
-            logger.warning(f"Markdown parse failed ({err}), falling back to plain text")
-            await update.message.reply_text(response.text)
-    else:
-        logger.error(f"Error handling message after retries: {last_err}", exc_info=True)
-        await update.message.reply_text(f"⚠️ Google reportó alta demanda temporal (503). Por favor reenvía tu mensaje en unos segundos.")
+    try:
+        response = execute_with_failover(user.id, user_text)
+        if response and response.text:
+            formatted = format_for_telegram(response.text)
+            try:
+                await update.message.reply_text(formatted, parse_mode="Markdown")
+            except Exception as err:
+                logger.warning(f"Markdown parse failed ({err}), falling back to plain text")
+                await update.message.reply_text(response.text)
+        else:
+            await update.message.reply_text("⚠️ No se recibió respuesta. Intenta de nuevo.")
+    except Exception as e:
+        logger.error(f"Error handling message after failover: {e}", exc_info=True)
+        await update.message.reply_text("⚠️ Todos los modelos de IA reportaron alta demanda temporal. Por favor reenvía tu mensaje en unos segundos.")
 
 
 async def handle_voice(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -595,13 +619,13 @@ async def handle_voice(update: Update, context: ContextTypes.DEFAULT_TYPE):
         voice_file = await context.bot.get_file(voice.file_id)
         voice_bytes = await voice_file.download_as_bytearray()
 
-        chat = get_or_create_chat(user.id)
         audio_part = types.Part.from_bytes(
             data=bytes(voice_bytes),
             mime_type="audio/ogg",
         )
 
-        response = chat.send_message(
+        response = execute_with_failover(
+            user.id,
             [audio_part, "Escucha mi nota de voz y responde a mi consulta como mi coach deportivo con acceso a mis datos de Garmin."]
         )
         if response and response.text:
