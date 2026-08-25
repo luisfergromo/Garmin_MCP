@@ -615,6 +615,18 @@ async def handle_voice(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(f"⚠️ Error procesando la nota de voz: {e}")
 
 
+from telegram import BotCommand
+
+async def post_init(application):
+    """Automatically register bot commands menu in Telegram UI."""
+    commands = [
+        BotCommand("start", "Iniciar o reiniciar el Coach"),
+        BotCommand("briefing", "☀️ Diagnóstico matutino (sueño, HRV, readiness)"),
+        BotCommand("semana", "📊 Resumen de volumen y carga de la semana"),
+    ]
+    await application.bot.set_my_commands(commands)
+    logger.info("Registered Telegram menu commands successfully.")
+
 def main():
     if not TELEGRAM_BOT_TOKEN:
         print("ERROR: Please set TELEGRAM_BOT_TOKEN in .env")
@@ -624,7 +636,7 @@ def main():
         sys.exit(1)
 
     print("Iniciando Garmin Coach Telegram Bot...")
-    app = ApplicationBuilder().token(TELEGRAM_BOT_TOKEN).build()
+    app = ApplicationBuilder().token(TELEGRAM_BOT_TOKEN).post_init(post_init).build()
 
     app.add_handler(CommandHandler("start", start_command))
     app.add_handler(CommandHandler("briefing", briefing_command))
