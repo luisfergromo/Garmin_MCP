@@ -172,7 +172,23 @@ def _init_garmin_client() -> _GarminProxy:
     """Initialize and authenticate the Garmin Connect client."""
     garmin = Garmin(email=email, password=password, is_cn=is_cn, prompt_mfa=get_mfa)
 
-    # Try token-based auth first
+    # Try base64 token string from environment variable (Best for Render/Cloud)
+    env_b64 = os.getenv("GARMIN_TOKENS_BASE64") or os.getenv("GARMINTOKENS_BASE64")
+    if env_b64 and len(env_b64.strip()) > 50:
+        try:
+            token_json_str = base64.b64decode(env_b64.strip()).decode("utf-8")
+            expanded_store = token_utils.resolve_token_path(tokenstore)
+            os.makedirs(expanded_store, exist_ok=True)
+            token_file = os.path.join(expanded_store, "garmin_tokens.json")
+            with open(token_file, "w") as f:
+                f.write(token_json_str)
+            garmin.login(expanded_store)
+            print("Authenticated via GARMIN_TOKENS_BASE64 environment variable.", file=sys.stderr)
+            return _GarminProxy(garmin)
+        except Exception as e:
+            print(f"GARMIN_TOKENS_BASE64 auth failed ({e}), falling back...", file=sys.stderr)
+
+    # Try token-based auth from local disk
     if token_utils.token_exists(tokenstore):
         try:
             garmin.login(tokenstore)
@@ -184,7 +200,7 @@ def _init_garmin_client() -> _GarminProxy:
                 file=sys.stderr,
             )
 
-    # Try base64 token
+    # Try base64 token file
     expanded_b64 = token_utils.resolve_token_path(tokenstore_base64)
     if os.path.exists(expanded_b64):
         try:
@@ -192,7 +208,7 @@ def _init_garmin_client() -> _GarminProxy:
                 token_b64 = f.read().strip()
             token_data = base64.b64decode(token_b64).decode()
             garmin.login(token_data)
-            print("Authenticated via base64 tokens.", file=sys.stderr)
+            print("Authenticated via base64 tokens file.", file=sys.stderr)
             return _GarminProxy(garmin)
         except Exception as e:
             print(
