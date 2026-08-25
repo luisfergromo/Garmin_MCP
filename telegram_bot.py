@@ -289,6 +289,72 @@ def create_running_base_workout(name: str, duration_minutes: int, schedule_date:
     except Exception as e:
         return f"Error creating running base workout: {e}"
 
+def get_heart_rate_zones() -> str:
+    """Get exact configured Heart Rate (HR) zones, lactate threshold, and resting/max HR from the user's Garmin profile."""
+    try:
+        zones = garmin_client._client.get_heart_rate_zones()
+        return json.dumps(zones, default=str)
+    except Exception as e:
+        return f"Error retrieving HR zones: {e}"
+
+def get_weekly_training_summary(weeks_ago: int = 0) -> str:
+    """Get accumulated weekly training volume (swimming km/sessions, running km/sessions, gym sessions, and total training load).
+    weeks_ago: 0 for current week (starting Monday), 1 for previous week, etc.
+    """
+    try:
+        today = datetime.date.today()
+        # Find the Monday of the requested week
+        target_monday = today - datetime.timedelta(days=today.weekday() + (weeks_ago * 7))
+        target_sunday = target_monday + datetime.timedelta(days=6)
+        
+        acts = garmin_client.get_activities(0, 50)
+        swimming = {"km": 0.0, "sessions": 0, "minutes": 0.0, "load": 0.0}
+        running = {"km": 0.0, "sessions": 0, "minutes": 0.0, "load": 0.0}
+        gym = {"sessions": 0, "minutes": 0.0, "load": 0.0}
+        cycling = {"km": 0.0, "sessions": 0, "minutes": 0.0, "load": 0.0}
+        total_load = 0.0
+
+        for a in (acts or []):
+            dt_str = (a.get("startTimeLocal") or "")[:10]
+            if target_monday.isoformat() <= dt_str <= target_sunday.isoformat():
+                tp = (a.get("activityType", {}).get("typeKey") or "").lower()
+                dist = (a.get("distance", 0) or 0) / 1000.0
+                dur = (a.get("duration", 0) or 0) / 60.0
+                ld = a.get("activityTrainingLoad", 0) or 0
+                total_load += ld
+
+                if "swim" in tp or "pool" in tp:
+                    swimming["km"] += dist
+                    swimming["sessions"] += 1
+                    swimming["minutes"] += dur
+                    swimming["load"] += ld
+                elif "run" in tp or "treadmill" in tp:
+                    running["km"] += dist
+                    running["sessions"] += 1
+                    running["minutes"] += dur
+                    running["load"] += ld
+                elif "strength" in tp or "gym" in tp or "fitness" in tp:
+                    gym["sessions"] += 1
+                    gym["minutes"] += dur
+                    gym["load"] += ld
+                elif "cycl" in tp or "bike" in tp:
+                    cycling["km"] += dist
+                    cycling["sessions"] += 1
+                    cycling["minutes"] += dur
+                    cycling["load"] += ld
+
+        return json.dumps({
+            "week_start_monday": target_monday.isoformat(),
+            "week_end_sunday": target_sunday.isoformat(),
+            "swimming": {k: round(v, 2) for k, v in swimming.items()},
+            "running": {k: round(v, 2) for k, v in running.items()},
+            "gym": {k: round(v, 2) for k, v in gym.items()},
+            "cycling": {k: round(v, 2) for k, v in cycling.items()},
+            "total_weekly_training_load": round(total_load, 1),
+        }, default=str)
+    except Exception as e:
+        return f"Error retrieving weekly summary: {e}"
+
 COACH_TOOLS = [
     get_today_date,
     get_daily_stats,
@@ -296,6 +362,8 @@ COACH_TOOLS = [
     get_training_readiness,
     get_training_status,
     get_hrv_data,
+    get_heart_rate_zones,
+    get_weekly_training_summary,
     get_recent_activities,
     get_activity_details,
     get_body_battery,
@@ -312,7 +380,7 @@ Eres el Coach personal de carrera, rendimiento y entrenamiento híbrido de Luis 
 PRINCIPIOS FUNDAMENTALES (NO ASUMIR NADA & DATOS REALES):
 1. NUNCA asumas valores fijos de VO2 Máx, Frecuencia Cardíaca, distancias, ritmos, sueño o número de sesiones.
 2. NUNCA asumas sensaciones físicas, dolores musculares, nivel de energía percibido o disponibilidad de tiempo.
-3. SIEMPRE consulta tus herramientas de Garmin Connect primero para obtener datos objetivos (sueño, HRV, FC reposo, actividades recientes) y crúzalos con las sensaciones que Luis Fernando te reporte.
+3. SIEMPRE consulta tus herramientas de Garmin Connect primero para obtener datos objetivos (sueño, HRV, FC reposo, zonas de FC exactas, actividades recientes) y crúzalos con las sensaciones que Luis Fernando te reporte.
 4. Si tienes cualquier duda sobre su disponibilidad de tiempo, terreno o fatiga en hombros/piernas, PREGÚNTALE DIRECTAMENTE de forma breve.
 
 ESTRUCTURA DEPORTIVA Y PRIORIDADES:
@@ -350,19 +418,35 @@ def format_for_telegram(text: str) -> str:
     lines = text.split("\n")
     cleaned_lines = []
     for line in lines:
-        # Convert '# Title', '## Title', '### Title' to '*Title*' or '**Title**'
         m = re.match(r"^\s*#{1,6}\s+(.*)$", line)
         if m:
-            title = m.group(1).strip()
-            # Remove any existing bold markers inside the heading
-            title = title.replace("**", "").replace("*", "")
+            title = m.group(1).strip().replace("**", "").replace("*", "")
             cleaned_lines.append(f"*{title}*")
         else:
             cleaned_lines.append(line)
     return "\n".join(cleaned_lines)
 
-# Store chat sessions per user id
+# Store chat sessions and target user
 user_chats = {}
+SAVED_CHAT_FILE = ".telegram_chat_id"
+
+def save_chat_id(chat_id: int):
+    try:
+        with open(SAVED_CHAT_FILE, "w") as f:
+            f.write(str(chat_id))
+    except Exception:
+        pass
+
+def load_chat_id() -> int | None:
+    try:
+        if os.path.exists(SAVED_CHAT_FILE):
+            with open(SAVED_CHAT_FILE, "r") as f:
+                val = f.read().strip()
+                if val:
+                    return int(val)
+    except Exception:
+        pass
+    return int(ALLOWED_USER_ID) if ALLOWED_USER_ID else None
 
 def get_or_create_chat(user_id: int):
     if user_id not in user_chats:
@@ -385,17 +469,72 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("⛔ Acceso no autorizado a este bot de coaching.")
         return
 
+    save_chat_id(update.effective_chat.id)
+
     welcome_text = (
         f"¡Hola {user.first_name}! 🏃‍♂️🏊‍♂️\n\n"
         "Soy tu *Coach Personal de Garmin*, conectado en vivo a tu reloj y a Garmin Connect.\n\n"
         "Puedo ayudarte con:\n"
         "• 🫀 *Analizar tu Training Readiness, HRV y sueño de anoche.*\n"
         "• 🏊‍♂️ *Revisar tus sesiones de natación y carreras recientes.*\n"
-        "• 🏃‍♂️ *Planificar tu entrenamiento de carrera o fuerza para hoy.*\n"
+        "• 🏃‍♂️ *Planificar y agendar entrenamientos en tu reloj EPIX Gen2.*\n"
+        "• 📊 *Resumen semanal de volumen con /semana.*\n"
+        "• ☀️ *Generar tu briefing matutino con /briefing.*\n"
         "• 🎙️ *¡También puedes enviarme notas de voz al terminar de entrenar!*\n\n"
         "¿Cómo te sientes hoy para entrenar?"
     )
     await update.message.reply_text(welcome_text, parse_mode="Markdown")
+
+
+async def briefing_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Generate on-demand Morning Briefing."""
+    user = update.effective_user
+    if ALLOWED_USER_ID and str(user.id) != str(ALLOWED_USER_ID):
+        return
+
+    save_chat_id(update.effective_chat.id)
+    await context.bot.send_chat_action(chat_id=update.effective_chat.id, action="typing")
+
+    chat = get_or_create_chat(user.id)
+    prompt = (
+        "Genera mi **Morning Briefing** de hoy. "
+        "Consulta mi sueño de anoche (profundo/REM/score), mi HRV, mi FC en reposo, Body Battery y Training Readiness. "
+        "Dame el diagnóstico rápido, recuérdame la prioridad de hoy según el día de la semana y pregúntame cómo amanecieron mis músculos/hombros."
+    )
+    try:
+        response = chat.send_message(prompt)
+        if response and response.text:
+            formatted = format_for_telegram(response.text)
+            try:
+                await update.message.reply_text(formatted, parse_mode="Markdown")
+            except Exception:
+                await update.message.reply_text(response.text)
+    except Exception as e:
+        await update.message.reply_text(f"⚠️ Error generando el briefing: {e}")
+
+
+async def weekly_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Generate on-demand weekly summary."""
+    user = update.effective_user
+    if ALLOWED_USER_ID and str(user.id) != str(ALLOWED_USER_ID):
+        return
+
+    await context.bot.send_chat_action(chat_id=update.effective_chat.id, action="typing")
+    chat = get_or_create_chat(user.id)
+    prompt = (
+        "Genera un desglose y análisis de mi volumen y carga acumulada de esta semana usando `get_weekly_training_summary`. "
+        "Desglosa kilómetros en agua, kilómetros en carrera, sesiones de gimnasio y Training Load total, dándome tu retroalimentación como Coach."
+    )
+    try:
+        response = chat.send_message(prompt)
+        if response and response.text:
+            formatted = format_for_telegram(response.text)
+            try:
+                await update.message.reply_text(formatted, parse_mode="Markdown")
+            except Exception:
+                await update.message.reply_text(response.text)
+    except Exception as e:
+        await update.message.reply_text(f"⚠️ Error generando el resumen semanal: {e}")
 
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -404,6 +543,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if ALLOWED_USER_ID and str(user.id) != str(ALLOWED_USER_ID):
         return
 
+    save_chat_id(update.effective_chat.id)
     user_text = update.message.text
     if not user_text:
         return
@@ -414,7 +554,6 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     response = None
     last_err = None
 
-    # Try sending with retries for transient 503 errors
     for attempt in range(3):
         try:
             chat = get_or_create_chat(user.id)
@@ -443,6 +582,7 @@ async def handle_voice(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if ALLOWED_USER_ID and str(user.id) != str(ALLOWED_USER_ID):
         return
 
+    save_chat_id(update.effective_chat.id)
     await context.bot.send_chat_action(chat_id=update.effective_chat.id, action="typing")
 
     try:
@@ -450,7 +590,6 @@ async def handle_voice(update: Update, context: ContextTypes.DEFAULT_TYPE):
         voice_file = await context.bot.get_file(voice.file_id)
         voice_bytes = await voice_file.download_as_bytearray()
 
-        # Send voice audio directly to Gemini Multimodal
         chat = get_or_create_chat(user.id)
         audio_part = types.Part.from_bytes(
             data=bytes(voice_bytes),
@@ -483,6 +622,8 @@ def main():
     app = ApplicationBuilder().token(TELEGRAM_BOT_TOKEN).build()
 
     app.add_handler(CommandHandler("start", start_command))
+    app.add_handler(CommandHandler("briefing", briefing_command))
+    app.add_handler(CommandHandler("semana", weekly_command))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
     app.add_handler(MessageHandler(filters.VOICE, handle_voice))
 
