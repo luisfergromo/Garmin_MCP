@@ -8,10 +8,15 @@ with full access to your live Garmin Connect metrics and activity history.
 import io
 import os
 import sys
-import datetime
 import json
 import logging
+import datetime
+from zoneinfo import ZoneInfo
 from pathlib import Path
+from typing import Any
+
+# Timezone for Guadalajara, Jalisco, Mexico
+LOCAL_TZ = ZoneInfo("America/Mexico_City")
 
 from dotenv import load_dotenv
 load_dotenv()
@@ -98,8 +103,8 @@ gemini_client = genai.Client(api_key=GEMINI_API_KEY) if GEMINI_API_KEY else None
 
 # Tools definition for Gemini Function Calling
 def get_today_date() -> str:
-    """Returns today's date in YYYY-MM-DD format."""
-    return datetime.date.today().isoformat()
+    """Returns today's date in YYYY-MM-DD format based on Guadalajara, Jalisco local time."""
+    return datetime.datetime.now(LOCAL_TZ).date().isoformat()
 
 def get_daily_stats(date: str) -> str:
     """Get daily health and activity statistics (steps, calories, HR, stress, body battery) for a date (YYYY-MM-DD)."""
@@ -151,7 +156,7 @@ def get_body_battery(date: str) -> str:
 
 def get_fitness_scores() -> str:
     """Get VO2 max, endurance score, and hill score."""
-    today = datetime.date.today().isoformat()
+    today = datetime.datetime.now(LOCAL_TZ).date().isoformat()
     res = {}
     try: res["max_metrics"] = garmin_client.get_max_metrics(today)
     except: pass
@@ -302,7 +307,7 @@ def get_weekly_training_summary(weeks_ago: int = 0) -> str:
     weeks_ago: 0 for current week (starting Monday), 1 for previous week, etc.
     """
     try:
-        today = datetime.date.today()
+        today = datetime.datetime.now(LOCAL_TZ).date()
         # Find the Monday of the requested week
         target_monday = today - datetime.timedelta(days=today.weekday() + (weeks_ago * 7))
         target_sunday = target_monday + datetime.timedelta(days=6)
