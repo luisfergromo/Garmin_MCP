@@ -192,8 +192,29 @@ DIRECTRICES COMO COACH:
 1. Consulta proactivamente las herramientas de Garmin cuando Luis Fernando te pregunte por su estado, cómo entrenar hoy, cómo durmió o cómo estuvo su sesión.
 2. Sé motivador, conciso, estructurado y altamente técnico en fisiología del deporte (zonas de frecuencia cardíaca Z1-Z5, Training Load, HRV, Body Battery).
 3. Usa emojis deportivos apropiados (🏃‍♂️, 🏊‍♂️, 🏋️‍♂️, 🫀, ⚡, 🌙).
-4. Responde en español con formato claro y fácil de leer en la pantalla de un celular (bullets, negritas, tablas cortas).
+4. REGLAS DE FORMATO PARA TELEGRAM (CRÍTICO):
+   - NUNCA uses hashtags (#, ##, ###) para títulos o secciones.
+   - Usa SIEMPRE texto en negrita con asteriscos dobles (**Título**) y emojis (ej: 🏊‍♂️ **Natación**, 🫀 **Frecuencia Cardíaca: 48 bpm**).
+   - Usa viñetas limpias (• o -) para listas.
+   - Destaca números y métricas clave en **negrita**.
 """
+
+def format_for_telegram(text: str) -> str:
+    """Clean markdown headings and format nicely for Telegram Markdown."""
+    import re
+    lines = text.split("\n")
+    cleaned_lines = []
+    for line in lines:
+        # Convert '# Title', '## Title', '### Title' to '*Title*' or '**Title**'
+        m = re.match(r"^\s*#{1,6}\s+(.*)$", line)
+        if m:
+            title = m.group(1).strip()
+            # Remove any existing bold markers inside the heading
+            title = title.replace("**", "").replace("*", "")
+            cleaned_lines.append(f"*{title}*")
+        else:
+            cleaned_lines.append(line)
+    return "\n".join(cleaned_lines)
 
 # Store chat sessions per user id
 user_chats = {}
@@ -221,12 +242,12 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     welcome_text = (
         f"¡Hola {user.first_name}! 🏃‍♂️🏊‍♂️\n\n"
-        "Soy tu **Coach Personal de Garmin**, conectado en vivo a tu reloj y a Garmin Connect.\n\n"
+        "Soy tu *Coach Personal de Garmin*, conectado en vivo a tu reloj y a Garmin Connect.\n\n"
         "Puedo ayudarte con:\n"
-        "• 🫀 Analizar tu Training Readiness, HRV y sueño de anoche.\n"
-        "• 🏊‍♂️ Revisar tus sesiones de natación y carreras recientes.\n"
-        "• 🏃‍♂️ Planificar tu entrenamiento de carrera o fuerza para hoy.\n"
-        "• 🎙️ ¡También puedes enviarme **mensajes de voz** al terminar de entrenar!\n\n"
+        "• 🫀 *Analizar tu Training Readiness, HRV y sueño de anoche.*\n"
+        "• 🏊‍♂️ *Revisar tus sesiones de natación y carreras recientes.*\n"
+        "• 🏃‍♂️ *Planificar tu entrenamiento de carrera o fuerza para hoy.*\n"
+        "• 🎙️ *¡También puedes enviarme notas de voz al terminar de entrenar!*\n\n"
         "¿Cómo te sientes hoy para entrenar?"
     )
     await update.message.reply_text(welcome_text, parse_mode="Markdown")
@@ -260,10 +281,11 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             time.sleep(2)
 
     if response and response.text:
+        formatted = format_for_telegram(response.text)
         try:
-            await update.message.reply_text(response.text, parse_mode="Markdown")
-        except Exception:
-            # Fallback to plain text if Telegram markdown fails
+            await update.message.reply_text(formatted, parse_mode="Markdown")
+        except Exception as err:
+            logger.warning(f"Markdown parse failed ({err}), falling back to plain text")
             await update.message.reply_text(response.text)
     else:
         logger.error(f"Error handling message after retries: {last_err}", exc_info=True)
@@ -293,7 +315,12 @@ async def handle_voice(update: Update, context: ContextTypes.DEFAULT_TYPE):
         response = chat.send_message(
             [audio_part, "Escucha mi nota de voz y responde a mi consulta como mi coach deportivo con acceso a mis datos de Garmin."]
         )
-        await update.message.reply_text(response.text, parse_mode="Markdown")
+        if response and response.text:
+            formatted = format_for_telegram(response.text)
+            try:
+                await update.message.reply_text(formatted, parse_mode="Markdown")
+            except Exception:
+                await update.message.reply_text(response.text)
     except Exception as e:
         logger.error(f"Error handling voice note: {e}", exc_info=True)
         await update.message.reply_text(f"⚠️ Error procesando la nota de voz: {e}")
