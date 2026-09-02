@@ -10,6 +10,7 @@ import os
 import sys
 import json
 import logging
+import asyncio
 import datetime
 from zoneinfo import ZoneInfo
 from pathlib import Path
@@ -540,7 +541,7 @@ async def briefing_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "Dame el diagnóstico rápido, recuérdame la prioridad de hoy según el día de la semana y pregúntame cómo amanecieron mis músculos/hombros."
     )
     try:
-        response = execute_with_failover(user.id, prompt)
+        response = await asyncio.to_thread(execute_with_failover, user.id, prompt)
         if response and response.text:
             formatted = format_for_telegram(response.text)
             try:
@@ -564,7 +565,7 @@ async def weekly_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "Desglosa kilómetros en agua, kilómetros en carrera, sesiones de gimnasio y Training Load total, dándome tu retroalimentación como Coach."
     )
     try:
-        response = execute_with_failover(user.id, prompt)
+        response = await asyncio.to_thread(execute_with_failover, user.id, prompt)
         if response and response.text:
             formatted = format_for_telegram(response.text)
             try:
@@ -590,7 +591,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await context.bot.send_chat_action(chat_id=update.effective_chat.id, action="typing")
 
     try:
-        response = execute_with_failover(user.id, user_text)
+        response = await asyncio.to_thread(execute_with_failover, user.id, user_text)
         if response and response.text:
             formatted = format_for_telegram(response.text)
             try:
