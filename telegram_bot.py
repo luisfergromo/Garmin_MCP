@@ -16,11 +16,15 @@ from zoneinfo import ZoneInfo
 from pathlib import Path
 from typing import Any
 
-# Timezone for Guadalajara, Jalisco, Mexico
-LOCAL_TZ = ZoneInfo("America/Mexico_City")
-
 from dotenv import load_dotenv
 load_dotenv()
+
+# Timezone configuration (Configurable via TIMEZONE env variable)
+TZ_NAME = os.getenv("TIMEZONE", os.getenv("LOCAL_TZ", "America/Mexico_City"))
+try:
+    LOCAL_TZ = ZoneInfo(TZ_NAME)
+except Exception:
+    LOCAL_TZ = ZoneInfo("America/Mexico_City")
 
 from google import genai
 from google.genai import types
@@ -380,43 +384,59 @@ COACH_TOOLS = [
     create_running_base_workout,
 ]
 
-SYSTEM_INSTRUCTION = """
-Eres el Coach personal de carrera, rendimiento y entrenamiento híbrido de Luis Fernando Gutiérrez Romo (usuario de Garmin EPIX Gen2).
+def build_system_instruction() -> str:
+    athlete_name = os.getenv("ATHLETE_NAME", os.getenv("COACH_USER_NAME", "Athlete"))
+    device_model = os.getenv("GARMIN_DEVICE_MODEL", "Garmin watch")
+    sport_focus = os.getenv("COACH_SPORT_FOCUS", "Running, swimming, cycling, strength, and hybrid performance")
+    custom_prompt = os.getenv("COACH_CUSTOM_PROMPT", "").strip()
+    profile_file = os.getenv("COACH_PROFILE_FILE", "coach_profile.txt")
 
-PRINCIPIOS FUNDAMENTALES (NO ASUMIR NADA & DATOS REALES):
-1. NUNCA asumas valores fijos de VO2 Máx, Frecuencia Cardíaca, distancias, ritmos, sueño o número de sesiones.
-2. NUNCA asumas sensaciones físicas, dolores musculares, nivel de energía percibido o disponibilidad de tiempo.
-3. SIEMPRE consulta tus herramientas de Garmin Connect primero para obtener datos objetivos (sueño, HRV, FC reposo, zonas de FC exactas, actividades recientes) y crúzalos con las sensaciones que Luis Fernando te reporte.
-4. Si tienes cualquier duda sobre su disponibilidad de tiempo, terreno o fatiga en hombros/piernas, PREGÚNTALE DIRECTAMENTE de forma breve.
+    profile_text = ""
+    if os.path.exists(profile_file):
+        try:
+            with open(profile_file, "r", encoding="utf-8") as f:
+                profile_text = f.read().strip()
+        except Exception as e:
+            logger.warning(f"Could not read athlete profile file {profile_file}: {e}")
 
-ESTRUCTURA DEPORTIVA Y PRIORIDADES:
-• PRIORIDAD #1 - NATACIÓN (Lunes a Viernes): Disciplina core. Monitorea volumen y carga para proteger sus hombros y asegurar frescura en el agua.
-• PRIORIDAD #2 - CARRERA (Running):
-  - Lunes a Viernes: En cinta (calidad, intervalos Z4 o base Z2 corta).
-  - Sábados: TIRADA LARGA EN CALLE (Outdoor Long Run en asfalto/terreno variado), aprovechando que no nada los sábados.
-• PRIORIDAD #3 - FUERZA EN GIMNASIO: Transferencia a carrera (glúteos/isquios/pantorrillas) y estabilidad para natación (dorsales/rotadores/core).
-• DOMINGOS - DESCANSO TOTAL: Asimilación y recarga de reservas.
+    base = f"""You are the elite AI Performance & Endurance Sports Coach for {athlete_name} (using a {device_model}).
+Primary athletic focus: {sport_focus}.
 
-PROTOCOLO DE RESPUESTA EN 3 BLOQUES (IDEAL PARA MÓVIL):
-Cuando Luis Fernando te consulte sobre su estado o qué entrenar hoy, estructura tu respuesta así:
-1. 📊 **Diagnóstico del Día**: Resumen ultra-breve de sus biométricos reales de hoy (Sueño total/profundo, HRV, FC reposo, Body Battery, Training Readiness).
-2. 🎯 **Sesión Recomendada**: Detalle exacto con Zonas de FC (Z1 a Z5) y tiempos por fase (Calentamiento, Intervalos, Recuperación, Enfriamiento).
-3. 💬 **Interacción y Ajuste**: Pregunta interactiva de sensaciones o disponibilidad y confirmación para programarlo en su reloj.
+CORE PRINCIPLES (NEVER ASSUME & USE REAL DATA):
+1. NEVER assume fixed values for VO2 Max, Heart Rate (HR), distances, paces, sleep duration, or completed sessions.
+2. NEVER assume physical sensations, soreness, perceived energy, or time availability.
+3. ALWAYS query your Garmin Connect tools first to retrieve objective metrics (sleep stages/score, nocturnal HRV, resting HR, exact HR zones, recent activities) and correlate them with whatever the athlete reports.
+4. If you have any doubt regarding time availability, terrain, or muscular fatigue, ASK DIRECTLY in a concise manner.
+5. Language: Respond in the athlete's preferred language (match the language of their message or voice note).
 
-ALERTAS DE RECUPERACIÓN (PREVENCIÓN DE LESIÓN/SOBREENTRENAMIENTO):
-- Si detectas sueño deficiente (<6.5h), HRV en desbalance o Body Battery < 50: Recomienda de forma proactiva modular a la baja (descanso activo o Z1 regenerativo).
+3-BLOCK RESPONSE PROTOCOL (OPTIMIZED FOR MOBILE):
+When the athlete asks for daily status or workout guidance, structure your response as:
+1. 📊 **Daily Diagnosis**: Ultra-concise summary of today's real biometrics (Total/deep sleep, nocturnal HRV, resting HR, Body Battery, Training Readiness).
+2. 🎯 **Recommended Session**: Detailed workout with exact Heart Rate Zones (Z1 to Z5) and phase durations (Warmup, Intervals, Recovery, Cooldown).
+3. 💬 **Check-in & Action**: Interactive question regarding muscle feel/time and confirmation to schedule it on the watch.
 
-NOTAS DE VOZ POST-ENTRENAMIENTO:
-- Si recibes una nota de voz tras entrenar, consulta de inmediato `get_recent_activities(limit=1)` para comparar lo que Luis Fernando te cuenta con los datos reales del reloj (ritmo, FC media/máx y Training Load).
+RECOVERY ALERTS (INJURY & OVERTRAINING PREVENTION):
+- If you detect poor sleep (<6.5h), unbalanced/low HRV, or Body Battery < 50: Proactively recommend scaling down (active recovery or gentle Z1).
 
-PROGRAMACIÓN EN EL RELOJ GARMIN:
-- Usa `create_running_interval_workout` o `create_running_base_workout` con `schedule_date` cuando Luis Fernando te pida agendar el entrenamiento en su EPIX Gen2.
+POST-WORKOUT VOICE NOTES:
+- When receiving a voice note after training, immediately query `get_recent_activities(limit=1)` to compare what the athlete describes with the actual watch data (pace, avg/max HR, and Training Load).
 
-FORMATO TELEGRAM (CRÍTICO):
-- NUNCA uses hashtags (#, ##, ###).
-- Usa SIEMPRE texto en negrita con asteriscos dobles (**Título**) para títulos y métricas clave.
-- Usa viñetas limpias (•).
+GARMIN WATCH WORKOUT SCHEDULING:
+- Use `create_running_interval_workout` or `create_running_base_workout` with `schedule_date` when the athlete asks to schedule the workout onto their {device_model}.
+
+TELEGRAM FORMATTING RULES:
+- NEVER use markdown hashtags (#, ##, ###).
+- ALWAYS use bold text with double asterisks (**Title**) for headings and key metrics.
+- Use clean bullet points (•).
 """
+    if profile_text:
+        base += f"\n\nATHLETE PROFILE, WEEKLY STRUCTURE & PREFERENCES:\n{profile_text}\n"
+    elif custom_prompt:
+        base += f"\n\nCUSTOM INSTRUCTIONS & GOALS:\n{custom_prompt}\n"
+
+    return base
+
+SYSTEM_INSTRUCTION = build_system_instruction()
 
 def format_for_telegram(text: str) -> str:
     """Clean markdown headings and format nicely for Telegram Markdown."""
@@ -499,29 +519,31 @@ def execute_with_failover(user_id: int, message_or_parts: Any) -> Any:
             last_err = e
             continue
 
-    raise last_err or RuntimeError("All fallback models exhausted")
+    logger.error(f"All fallback models failed! Last error: {last_err}")
+    raise last_err
 
 
 async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle /start command."""
     user = update.effective_user
     if ALLOWED_USER_ID and str(user.id) != str(ALLOWED_USER_ID):
-        await update.message.reply_text("⛔ Acceso no autorizado a este bot de coaching.")
+        await update.message.reply_text("⛔ Unauthorized access to this coach bot.")
         return
 
     save_chat_id(update.effective_chat.id)
+    device_model = os.getenv("GARMIN_DEVICE_MODEL", "your Garmin watch")
 
     welcome_text = (
-        f"¡Hola {user.first_name}! 🏃‍♂️🏊‍♂️\n\n"
-        "Soy tu *Coach Personal de Garmin*, conectado en vivo a tu reloj y a Garmin Connect.\n\n"
-        "Puedo ayudarte con:\n"
-        "• 🫀 *Analizar tu Training Readiness, HRV y sueño de anoche.*\n"
-        "• 🏊‍♂️ *Revisar tus sesiones de natación y carreras recientes.*\n"
-        "• 🏃‍♂️ *Planificar y agendar entrenamientos en tu reloj EPIX Gen2.*\n"
-        "• 📊 *Resumen semanal de volumen con /semana.*\n"
-        "• ☀️ *Generar tu briefing matutino con /briefing.*\n"
-        "• 🎙️ *¡También puedes enviarme notas de voz al terminar de entrenar!*\n\n"
-        "¿Cómo te sientes hoy para entrenar?"
+        f"Hello {user.first_name}! 🏃‍♂️💪\n\n"
+        "I am your **Personal Garmin AI Coach**, connected live to your Garmin Connect data.\n\n"
+        "I can help you with:\n"
+        "• 🫀 **Analyzing your Training Readiness, HRV & Sleep score.**\n"
+        "• 🏃‍♂️ **Reviewing your recent activities and Training Load balance.**\n"
+        f"• ⏱️ **Planning and scheduling workouts directly onto your {device_model}.**\n"
+        "• 📊 **Weekly volume and sport breakdown with /week.**\n"
+        "• ☀️ **Generating your daily morning briefing with /briefing.**\n"
+        "• 🎙️ **You can also send me voice notes right after your training session!**\n\n"
+        "How are you feeling today?"
     )
     await update.message.reply_text(welcome_text, parse_mode="Markdown")
 
@@ -536,9 +558,9 @@ async def briefing_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await context.bot.send_chat_action(chat_id=update.effective_chat.id, action="typing")
 
     prompt = (
-        "Genera mi **Morning Briefing** de hoy. "
-        "Consulta mi sueño de anoche (profundo/REM/score), mi HRV, mi FC en reposo, Body Battery y Training Readiness. "
-        "Dame el diagnóstico rápido, recuérdame la prioridad de hoy según el día de la semana y pregúntame cómo amanecieron mis músculos/hombros."
+        "Generate my **Morning Briefing** for today. "
+        "Check last night's sleep (deep/REM/score), nocturnal HRV, resting HR, Body Battery, and Training Readiness. "
+        "Provide a quick diagnostic, workout recommendation based on recovery state, and ask about physical sensations and energy levels."
     )
     try:
         response = await asyncio.to_thread(execute_with_failover, user.id, prompt)
@@ -550,7 +572,7 @@ async def briefing_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 await update.message.reply_text(response.text)
     except Exception as e:
         logger.error(f"Error in briefing: {e}", exc_info=True)
-        await update.message.reply_text(f"⚠️ Hubo un detalle temporal con el servicio de IA. Por favor reintenta en un momento.")
+        await update.message.reply_text("⚠️ Temporary AI service issue. Please try again in a moment.")
 
 
 async def weekly_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -561,8 +583,8 @@ async def weekly_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     await context.bot.send_chat_action(chat_id=update.effective_chat.id, action="typing")
     prompt = (
-        "Genera un desglose y análisis de mi volumen y carga acumulada de esta semana usando `get_weekly_training_summary`. "
-        "Desglosa kilómetros en agua, kilómetros en carrera, sesiones de gimnasio y Training Load total, dándome tu retroalimentación como Coach."
+        "Generate a breakdown and analysis of my training volume and accumulated load for this week using `get_weekly_training_summary`. "
+        "Break down distance, sessions, and total Training Load by sport, and provide coaching feedback."
     )
     try:
         response = await asyncio.to_thread(execute_with_failover, user.id, prompt)
@@ -574,7 +596,7 @@ async def weekly_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 await update.message.reply_text(response.text)
     except Exception as e:
         logger.error(f"Error in weekly: {e}", exc_info=True)
-        await update.message.reply_text(f"⚠️ Hubo un detalle temporal con el servicio de IA. Por favor reintenta en un momento.")
+        await update.message.reply_text("⚠️ Temporary AI service issue. Please try again in a moment.")
 
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -600,10 +622,10 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 logger.warning(f"Markdown parse failed ({err}), falling back to plain text")
                 await update.message.reply_text(response.text)
         else:
-            await update.message.reply_text("⚠️ No se recibió respuesta. Intenta de nuevo.")
+            await update.message.reply_text("⚠️ No response received. Please try again.")
     except Exception as e:
         logger.error(f"Error handling message after failover: {e}", exc_info=True)
-        await update.message.reply_text("⚠️ Todos los modelos de IA reportaron alta demanda temporal. Por favor reenvía tu mensaje en unos segundos.")
+        await update.message.reply_text("⚠️ AI service experienced temporary high demand. Please resend your message in a few seconds.")
 
 
 async def handle_voice(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -627,7 +649,7 @@ async def handle_voice(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         response = execute_with_failover(
             user.id,
-            [audio_part, "Escucha mi nota de voz y responde a mi consulta como mi coach deportivo con acceso a mis datos de Garmin."]
+            [audio_part, "Listen to my voice note and respond as my performance sports coach with access to my Garmin metrics."]
         )
         if response and response.text:
             formatted = format_for_telegram(response.text)
@@ -637,7 +659,7 @@ async def handle_voice(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 await update.message.reply_text(response.text)
     except Exception as e:
         logger.error(f"Error handling voice note: {e}", exc_info=True)
-        await update.message.reply_text(f"⚠️ Error procesando la nota de voz: {e}")
+        await update.message.reply_text(f"⚠️ Error processing voice note: {e}")
 
 
 from telegram import BotCommand
@@ -645,9 +667,10 @@ from telegram import BotCommand
 async def post_init(application):
     """Automatically register bot commands menu in Telegram UI."""
     commands = [
-        BotCommand("start", "Iniciar o reiniciar el Coach"),
-        BotCommand("briefing", "☀️ Diagnóstico matutino (sueño, HRV, readiness)"),
-        BotCommand("semana", "📊 Resumen de volumen y carga de la semana"),
+        BotCommand("start", "Start or restart the Coach"),
+        BotCommand("briefing", "☀️ Morning diagnosis (sleep, HRV, readiness)"),
+        BotCommand("week", "📊 Weekly volume & training load breakdown"),
+        BotCommand("semana", "📊 Resumen semanal (Spanish alias)"),
     ]
     await application.bot.set_my_commands(commands)
     logger.info("Registered Telegram menu commands successfully.")
@@ -660,16 +683,17 @@ def main():
         print("ERROR: Please set GEMINI_API_KEY in .env")
         sys.exit(1)
 
-    print("Iniciando Garmin Coach Telegram Bot...")
+    print("Starting Garmin Coach Telegram Bot...")
     app = ApplicationBuilder().token(TELEGRAM_BOT_TOKEN).post_init(post_init).build()
 
     app.add_handler(CommandHandler("start", start_command))
     app.add_handler(CommandHandler("briefing", briefing_command))
+    app.add_handler(CommandHandler("week", weekly_command))
     app.add_handler(CommandHandler("semana", weekly_command))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
     app.add_handler(MessageHandler(filters.VOICE, handle_voice))
 
-    print(" Bot de Telegram en línea y listo para recibir mensajes.")
+    print("🤖 Telegram Bot is online and listening for messages.")
     app.run_polling()
 
 

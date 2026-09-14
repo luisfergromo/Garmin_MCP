@@ -17,10 +17,12 @@ env/
 # Environment variables
 .env
 
-# Garmin tokens (sensitive)
+# Garmin tokens & local state (sensitive)
 .garminconnect/
 .garminconnect_base64
 full_analysis.json
+.telegram_chat_id
+coach_profile.txt
 *.log
 
 # IDE

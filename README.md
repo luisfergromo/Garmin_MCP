@@ -1,168 +1,296 @@
-# Garmin MCP Server
+# 🏃‍♂️ Garmin AI Coach & MCP Server ⌚🤖
 
-Servidor MCP (Model Context Protocol) que conecta a Garmin Connect y expone tus datos de fitness y salud a **Gemini**, **Claude**, y otros clientes MCP compatibles.
+[![Python 3.12+](https://img.shields.io/badge/python-3.12+-blue.svg)](https://www.python.org/downloads/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Gemini 2.5/3.5/3.7](https://img.shields.io/badge/Gemini-AI%20Powered-orange.svg)](https://aistudio.google.com/)
+[![Telegram Bot](https://img.shields.io/badge/Telegram-Bot%20Ready-2CA5E0.svg?logo=telegram)](https://telegram.org/)
+[![Model Context Protocol](https://img.shields.io/badge/MCP-Protocol%201.0-purple.svg)](https://modelcontextprotocol.io/)
 
-Los datos de Garmin se acceden a través de la librería [python-garminconnect](https://github.com/cyberjunky/python-garminconnect).
+A complete Artificial Intelligence ecosystem for athletes of any discipline (Running, Swimming, Cycling, Triathlon, Gym, Hyrox, CrossFit, etc.) connected in real-time to **Garmin Connect**.
 
-## Features
+It includes two primary operating modes:
+1. 📱 **Personal Telegram Coach (Powered by Gemini AI)**: Chat or send voice notes to your AI coach directly from your mobile phone. It monitors your daily recovery (Sleep stages/score, nocturnal HRV, Body Battery, Training Readiness), evaluates weekly load distribution, and **schedules structured workouts directly onto your Garmin watch**.
+2. 🔌 **Model Context Protocol (MCP) Server**: Exposes your Garmin health, fitness, and activity metrics to **Google Gemini**, **Claude Desktop**, **Cursor**, or **Antigravity IDE** with 50+ pre-built tools.
 
-- 📊 **Actividades** — Listar, buscar, ver detalle, editar nombre/tipo
-- ❤️ **Salud** — Estadísticas diarias, sueño, estrés, frecuencia cardíaca, SpO2, HRV, Body Battery
-- 🏋️ **Entrenamiento** — Estado, readiness, VO2 max, hill/endurance scores, predicciones de carrera
-- ⌚ **Dispositivos** — Lista de dispositivos, configuración, datos de solar
-- 👟 **Gear** — Equipamiento y estadísticas de uso
-- ⚖️ **Peso** — Registro y consulta de pesajes
-- 🏃 **Workouts** — Listar, crear, programar, eliminar
-- 👤 **Perfil** — Información del usuario
+---
 
-### Tool Coverage
+## 🌟 Key Features
 
-~50 herramientas organizadas en 8 módulos:
+- 🫀 **Comprehensive Recovery & Health Diagnostics**: Sleep stages (Deep/Light/REM, sleep score, SpO2), nocturnal HRV balance, resting heart rate, stress, and Body Battery.
+- 🎯 **Targeted HR Zone Workouts**: Calculates and adapts your workouts according to your configured Garmin Heart Rate Zones (Z1 through Z5) and muscular readiness.
+- ⌚ **Direct Watch Workout Scheduling**: Creates structured interval or aerobic base workouts and schedules them directly onto your Garmin watch calendar via Garmin Connect.
+- 🎙️ **Telegram Voice Notes Support**: Send a voice note right after finishing your session; the AI transcribes and correlates your verbal feedback against the actual workout metrics recorded by your watch.
+- ⚡ **Multi-Model Failover Cascade**: Automatically fails over across Gemini models (`gemini-3.5-flash-lite`, `gemini-3.1-flash-lite`, `gemini-flash-lite-latest`, `gemini-3.5-flash`, `gemini-3.7-flash`) to guarantee 100% uptime without rate-limit interruptions.
+- 🛡️ **Privacy & Security First**: Local OAuth token caching, strict `.gitignore` filters, and optional Telegram User ID whitelist restrictions.
 
-| Categoría | Tools | Descripción |
-|-----------|-------|-------------|
-| Actividades | 10 | Listado, detalle, splits, HR zones, clima, edición |
-| Salud & Bienestar | 15 | Stats, sueño, estrés, HR, HRV, SpO2, Body Battery, hidratación |
-| Entrenamiento | 8 | Training status/readiness, VO2 max, predicciones, badges |
-| Dispositivos | 5 | Lista, configuración, solar |
-| Gear | 4 | Equipamiento y estadísticas |
-| Peso | 4 | Pesajes y registro |
-| Workouts | 5 | Gestión de entrenamientos |
-| Perfil | 3 | Info de usuario |
+---
 
-## Quick Start
+## 📋 Prerequisites
 
-### Prerrequisitos
+1. **Python 3.12+** installed on your machine.
+2. **[uv](https://docs.astral.sh/uv/)** (recommended for speed) or standard `pip`.
+3. **Garmin Connect Account** (Email and Password).
+4. **Google Gemini API Key** (Free tier available at [Google AI Studio](https://aistudio.google.com/app/apikey)).
+5. **Telegram Bot Token** (Free via [@BotFather](https://t.me/botfather)).
 
-- Python 3.12+
-- [uv](https://docs.astral.sh/uv/) (recomendado) o pip
-- Cuenta de Garmin Connect
+---
 
-### Paso 1: Pre-autenticación (una vez)
+## 🚀 Quick Start Guide (3 Minutes)
 
-```bash
-# Con uv (recomendado)
-uvx --python 3.12 --from . garmin-mcp-auth
-
-# O directamente
-uv run garmin-mcp-auth
-
-# Variables de entorno (alternativa)
-GARMIN_EMAIL=tu@email.com GARMIN_PASSWORD=secreto garmin-mcp-auth
-```
-
-Los tokens OAuth se guardan en `~/.garminconnect` y son válidos ~6 meses.
-
-### Paso 2: Verificar tokens
+### 1. Clone the repository
 
 ```bash
-garmin-mcp-auth --verify
-```
-
-## Configuración para Gemini (Antigravity IDE)
-
-Agrega la configuración MCP en tu archivo de configuración de Antigravity:
-
-```json
-{
-  "mcpServers": {
-    "garmin": {
-      "command": "uv",
-      "args": [
-        "--directory",
-        "C:/ruta/a/Garmin_MCP",
-        "run",
-        "garmin-mcp"
-      ]
-    }
-  }
-}
-```
-
-O usando uvx directamente (sin clonar el repo):
-
-```json
-{
-  "mcpServers": {
-    "garmin": {
-      "command": "uvx",
-      "args": [
-        "--python",
-        "3.12",
-        "--from",
-        ".",
-        "garmin-mcp"
-      ]
-    }
-  }
-}
-```
-
-## Configuración para Claude Desktop
-
-Editar `%APPDATA%\Claude\claude_desktop_config.json` (Windows):
-
-```json
-{
-  "mcpServers": {
-    "garmin": {
-      "command": "uv",
-      "args": [
-        "--directory",
-        "C:/ruta/a/Garmin_MCP",
-        "run",
-        "garmin-mcp"
-      ]
-    }
-  }
-}
-```
-
-## Variables de Entorno
-
-| Variable | Descripción | Default |
-|----------|-------------|---------|
-| `GARMIN_EMAIL` | Email de Garmin Connect | — |
-| `GARMIN_PASSWORD` | Password de Garmin Connect | — |
-| `GARMIN_EMAIL_FILE` | Archivo con el email | — |
-| `GARMIN_PASSWORD_FILE` | Archivo con el password | — |
-| `GARMIN_IS_CN` | Usar Garmin China (garmin.cn) | `false` |
-| `GARMIN_MCP_TRANSPORT` | Transporte: `stdio`, `streamable-http`, `sse` | `stdio` |
-| `GARMIN_MCP_HOST` | Host para transporte HTTP | `127.0.0.1` |
-| `GARMIN_MCP_PORT` | Puerto para transporte HTTP | `8000` |
-| `GARMIN_ENABLED_TOOLS` | Lista de tools habilitados (CSV) | todos |
-| `GARMIN_DISABLED_TOOLS` | Lista de tools deshabilitados (CSV) | ninguno |
-
-## Tool Filtering
-
-Puedes filtrar qué herramientas expone el servidor:
-
-```json
-{
-  "env": {
-    "GARMIN_ENABLED_TOOLS": "get_stats,get_activities,get_sleep_data"
-  }
-}
-```
-
-## Desarrollo
-
-```bash
-# Clonar e instalar
-git clone <repo-url>
+git clone https://github.com/YOUR_USERNAME/Garmin_MCP.git
 cd Garmin_MCP
-uv sync
-
-# Correr el servidor
-uv run garmin-mcp
-
-# Correr tests
-uv run python -m pytest tests/
-
-# Inspector MCP
-npx @modelcontextprotocol/inspector uv run garmin-mcp
 ```
 
-## Licencia
+### 2. Install dependencies
 
-MIT
+With `uv` (recommended):
+```bash
+uv sync
+```
+
+Or with standard `pip`:
+```bash
+python -m venv .venv
+# On Windows:
+.venv\Scripts\activate
+# On Linux/macOS:
+source .venv/bin/activate
+
+pip install -e .
+```
+
+### 3. Configure environment variables
+
+Copy `.env.example` to `.env`:
+
+```bash
+# On Windows:
+copy .env.example .env
+
+# On Linux / macOS:
+cp .env.example .env
+```
+
+Open `.env` in your text editor and fill in the required keys:
+
+```env
+# 1. Garmin Connect
+GARMIN_EMAIL=your_email@example.com
+GARMIN_PASSWORD=your_password_here
+
+# 2. Google Gemini AI (https://aistudio.google.com/app/apikey)
+GEMINI_API_KEY=your_gemini_api_key_here
+
+# 3. Telegram Bot (https://t.me/botfather)
+TELEGRAM_BOT_TOKEN=your_telegram_bot_token_here
+
+# 4. Optional Security: restrict bot exclusively to your Telegram User ID
+# TELEGRAM_ALLOWED_USER_ID=123456789
+```
+
+### 4. Authenticate Garmin Tokens (One-time step)
+
+To authenticate your Garmin account and securely cache OAuth tokens locally:
+
+```bash
+uv run garmin-mcp-auth
+```
+*(If your account has Two-Factor Authentication (2FA) enabled, you will be prompted for your SMS/Email verification code in the terminal).*
+
+---
+
+## 🎨 Customizing Your Coach (No Code Changes Needed)
+
+You can customize your coach's persona, schedule, sport focus, and timezone using two simple methods:
+
+### Option 1: Via `.env` Variables
+
+| Variable | Description | Example / Default |
+|---|---|---|
+| `TIMEZONE` | Timezone for accurate date and morning briefing calculations | `America/New_York`, `Europe/London`, `America/Mexico_City` |
+| `ATHLETE_NAME` | Name your Coach will use to address you | `Alex`, `Sarah`, `Athlete` |
+| `GARMIN_DEVICE_MODEL` | Your Garmin watch model for tailored instructions | `Forerunner 965`, `Fenix 7`, `EPIX Gen2`, `Venu 3` |
+| `COACH_SPORT_FOCUS` | Main sports and athletic focus | `Marathon & Strength`, `Olympic Triathlon`, `Trail Running` |
+| `COACH_CUSTOM_PROMPT` | Custom directives, current goals, or specific guidelines | `Preparing for a sub-40 min 10k race. Protect left hamstring.` |
+| `TELEGRAM_ALLOWED_USER_ID` | Your Telegram User ID to lock the bot to your account | `987654321` (Get your ID via [@userinfobot](https://t.me/userinfobot)) |
+
+### Option 2: Using an Athlete Profile File (`coach_profile.txt`)
+
+If you have a specific weekly training schedule, injury history, or training constraints, copy the example profile:
+
+```bash
+# On Windows:
+copy coach_profile.example.txt coach_profile.txt
+
+# On Linux/macOS:
+cp coach_profile.example.txt coach_profile.txt
+```
+
+Edit `coach_profile.txt` in plain English:
+```text
+[ATHLETE]
+Name: Alex
+Primary Sports: Triathlon (Running, Cycling, Swimming)
+Current Goal: Half Ironman (70.3) in 6 months
+
+[PREFERRED WEEKLY SCHEDULE]
+- Monday: Technique Swimming + Mobility & Core
+- Tuesday: Track Interval Running (Zone 4 / Threshold)
+- Wednesday: Zone 2 Cycling + Upper Body Strength
+- Thursday: Easy Aerobic Recovery Run (Zone 1/2)
+- Friday: Endurance Swimming + Lower Body Strength
+- Saturday: Outdoor Long Run or Long Ride
+- Sunday: Full Rest & Recovery
+
+[PREFERENCES & INJURIES]
+- History: Watch left Achilles tendon when exceeding 180 spm.
+- Availability: 60-75 min on weekdays (mornings), 3 hours on Saturdays.
+```
+
+The coach will automatically detect `coach_profile.txt` and seamlessly incorporate your routine into all its training advice.
+
+---
+
+## 📱 Using the Telegram Coach Bot
+
+Start the bot:
+
+```bash
+uv run python telegram_bot.py
+```
+
+### Available Telegram Commands
+
+| Command | Description |
+|---|---|
+| `/start` | Welcome message, connection status, and quick-action menu. |
+| `/briefing` | **Morning Briefing**: Real-time diagnostic of your sleep, HRV, Body Battery, Training Readiness, and today's workout recommendation. |
+| `/week` or `/semana` | **Weekly Summary**: Accumulated distance, hours, and Training Load across all logged disciplines. |
+| `/status` | Connection health check and active Gemini model status. |
+| `/help` | Bot command guide, workout tips, and voice notes instructions. |
+
+### 🎙️ Voice Notes After Training
+After finishing a workout, tap the microphone button in Telegram and tell your coach how you felt:
+> *"Coach, I just finished the 5x1000m track intervals. My legs felt slightly heavy on the last two reps, but I kept my heart rate in Zone 4. How did the actual numbers look on my watch?"*
+
+The AI will fetch your most recent activity from Garmin Connect, compare your real-time heart rate and pace with your verbal sensations, and provide immediate feedback.
+
+### 📅 Scheduling Workouts onto Your Watch
+Simply ask the coach in natural language:
+> *"Coach, please create a 5x3 min interval session with 2 min recovery and schedule it on my watch for tomorrow morning."*
+
+---
+
+## 🔌 Running as an MCP Server (Gemini / Claude / Cursor)
+
+Use this repository as a backend data provider for Model Context Protocol (MCP) clients.
+
+### Available MCP Tools (~50 tools):
+
+- 📊 **Activities**: `get_activities`, `get_activity_details`, `get_activity_splits`, `get_activity_hr_in_zones`, etc.
+- ❤️ **Health & Wellness**: `get_stats`, `get_sleep_data`, `get_hrv_data`, `get_body_battery`, `get_stress_data`, `get_spo2_data`.
+- 🏋️ **Training & Fitness**: `get_training_status`, `get_training_readiness`, `get_vo2_max`, `get_race_predictions`, `get_endurance_score`.
+- 👟 **Gear**: `get_gear`, `get_gear_stats`.
+- ⌚ **Devices**: `get_devices`, `get_device_settings`.
+- 🏃 **Workouts**: `get_workouts`, `upload_workout`, `schedule_workout`.
+
+### Antigravity IDE / Gemini MCP Configuration
+
+Add the server to your MCP settings file:
+
+```json
+{
+  "mcpServers": {
+    "garmin": {
+      "command": "uv",
+      "args": [
+        "--directory",
+        "/full/path/to/Garmin_MCP",
+        "run",
+        "garmin-mcp"
+      ]
+    }
+  }
+}
+```
+
+### Claude Desktop Configuration
+
+In `%APPDATA%\Claude\claude_desktop_config.json` (Windows) or `~/Library/Application Support/Claude/claude_desktop_config.json` (macOS):
+
+```json
+{
+  "mcpServers": {
+    "garmin": {
+      "command": "uv",
+      "args": [
+        "--directory",
+        "/full/path/to/Garmin_MCP",
+        "run",
+        "garmin-mcp"
+      ]
+    }
+  }
+}
+```
+
+---
+
+## ☁️ Cloud Deployment (Docker / Render / Google Cloud Run)
+
+The project includes an optimized `Dockerfile` and an internal healthcheck HTTP server listening on port `8080` (or `$PORT`), ready for PaaS platforms and container engines.
+
+### 1. Build Docker image locally
+
+```bash
+docker build -t garmin-coach-bot .
+```
+
+### 2. Run container with environment variables
+
+```bash
+docker run -d \
+  -e GARMIN_EMAIL="your_email@example.com" \
+  -e GARMIN_PASSWORD="your_password" \
+  -e GEMINI_API_KEY="your_gemini_api_key" \
+  -e TELEGRAM_BOT_TOKEN="your_telegram_token" \
+  -e TIMEZONE="America/New_York" \
+  --name garmin_coach \
+  garmin-coach-bot
+```
+
+### 💡 Cloud Deployment Tip (Bypass Cloudflare Block / 2FA)
+When deploying to Render, Fly.io, or Google Cloud Run, cloud datacenter IPs may trigger Garmin's Cloudflare captcha. You can bypass this using pre-authenticated base64 tokens:
+1. Run `uv run garmin-mcp-auth` on your local machine.
+2. Open the generated `.garminconnect_base64` file.
+3. Copy the string and set it as the `GARMIN_TOKENS_BASE64` environment variable in your cloud platform settings. The bot will authenticate instantly without requiring login credentials or captcha.
+
+---
+
+## 🔒 Privacy & Security
+
+- **Zero Credentials Committed**: The `.gitignore` file strictly excludes `.env`, session token folders (`.garminconnect/`, `.garminconnect_base64`), `coach_profile.txt`, local JSON dumps, and log files.
+- **Whitelist Protection**: Configure `TELEGRAM_ALLOWED_USER_ID` in your `.env` to prevent unauthorized users from interacting with your bot.
+
+---
+
+## 🧪 Testing and Local Diagnostics
+
+Verify that your Garmin Connect connection and tool integrations work properly:
+
+```bash
+# Test live Garmin connection and view today's health metrics
+uv run python demo.py
+
+# Run automated unit tests
+uv run pytest
+```
+
+---
+
+## 📄 License
+
+This project is licensed under the [MIT License](LICENSE). Feel free to use, modify, and distribute it.

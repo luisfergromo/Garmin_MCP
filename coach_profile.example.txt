@@ -1,0 +1,25 @@
+# ==============================================================================
+# ATHLETE CUSTOM PROFILE & OBJECTIVES (Optional)
+# Copy this file as `coach_profile.txt` and customize it with your preferences.
+# The Telegram Coach will automatically read and apply it without modifying code.
+# ==============================================================================
+
+[ATHLETE]
+Name: Athlete
+Primary Sports: Running / Trail / Swimming / Cycling / Hybrid / Strength
+Current Goal: Improve 10k pace (sub-45 min) / Half Marathon / General longevity & fitness
+
+[PREFERRED WEEKLY SCHEDULE]
+- Monday: Swimming or Easy Run (Zone 2) + Mobility & Core
+- Tuesday: Interval / Threshold Quality Workout (Zone 4)
+- Wednesday: Gym Strength Training (Legs / Core / Posterior Chain)
+- Thursday: Base Aerobic Run (Zone 2)
+- Friday: Technique Swimming / Upper Body Strength
+- Saturday: Outdoor Long Run (Endurance)
+- Sunday: Full Rest & Recovery
+
+[PREFERENCES & INJURY HISTORY]
+- Weak spots or past injuries: Protect right shoulder in swimming, careful with knees on downhill trails.
+- Availability: 5 to 6 sessions per week (approx. 60-75 min on weekdays).
+- Preferred training window: Early mornings (6:00 AM - 8:00 AM).
+- Typical terrain: Paved road, track, and treadmill.
