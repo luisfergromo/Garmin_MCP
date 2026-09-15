@@ -5,6 +5,7 @@
 [![Gemini 2.5/3.5/3.7](https://img.shields.io/badge/Gemini-AI%20Powered-orange.svg)](https://aistudio.google.com/)
 [![Telegram Bot](https://img.shields.io/badge/Telegram-Bot%20Ready-2CA5E0.svg?logo=telegram)](https://telegram.org/)
 [![Model Context Protocol](https://img.shields.io/badge/MCP-Protocol%201.0-purple.svg)](https://modelcontextprotocol.io/)
+[![Buy Me A Coffee](https://img.shields.io/badge/Buy%20Me%20A%20Coffee-Support-FFDD00?logo=buy-me-a-coffee&logoColor=black)](https://buymeacoffee.com/luisfergromo)
 
 A complete Artificial Intelligence ecosystem for athletes of any discipline (Running, Swimming, Cycling, Triathlon, Gym, Hyrox, CrossFit, etc.) connected in real-time to **Garmin Connect**.
 
@@ -288,6 +289,14 @@ uv run python demo.py
 # Run automated unit tests
 uv run pytest
 ```
+
+---
+
+## ☕ Support
+
+If you find this project helpful, consider supporting its development:
+
+<a href="https://buymeacoffee.com/luisfergromo" target="_blank"><img src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" alt="Buy Me A Coffee" style="height: 60px !important;width: 217px !important;" ></a>
 
 ---
 
